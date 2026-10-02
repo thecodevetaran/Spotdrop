@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import Navbar from './components/Navbar';
 import Hero from './components/Hero';
 import CityIntro from './sections/CityIntro';
@@ -8,8 +8,78 @@ import ProductTease from './components/ProductTease';
 import DropOrSkip from './components/DropOrSkip';
 import FinalWaitlist from './sections/FinalWaitlist';
 import Footer from './components/Footer';
+import AdminLogin from './pages/AdminLogin';
+import AdminDashboard from './pages/AdminDashboard';
+import { initReferralTracking } from './utils/referral';
 
 export default function App() {
+  const [currentPath, setCurrentPath] = useState(
+    typeof window !== 'undefined' ? window.location.pathname : '/'
+  );
+  const [isAdminAuthenticated, setIsAdminAuthenticated] = useState(false);
+  const [checkingAuth, setCheckingAuth] = useState(true);
+
+  // Initialize referral tracking from ?ref= parameter & listen to history changes
+  useEffect(() => {
+    initReferralTracking();
+
+    const handleLocationChange = () => {
+      setCurrentPath(window.location.pathname);
+    };
+
+    window.addEventListener('popstate', handleLocationChange);
+    return () => window.removeEventListener('popstate', handleLocationChange);
+  }, []);
+
+  // Check admin authentication state if visiting /admin
+  useEffect(() => {
+    if (currentPath === '/admin' || currentPath.startsWith('/admin')) {
+      setCheckingAuth(true);
+      fetch('/api/admin/me')
+        .then((res) => {
+          if (res.ok) {
+            setIsAdminAuthenticated(true);
+          } else {
+            setIsAdminAuthenticated(false);
+          }
+        })
+        .catch(() => setIsAdminAuthenticated(false))
+        .finally(() => setCheckingAuth(false));
+    } else {
+      setCheckingAuth(false);
+    }
+  }, [currentPath]);
+
+  // If on /admin route
+  if (currentPath === '/admin' || currentPath.startsWith('/admin')) {
+    if (checkingAuth) {
+      return (
+        <div
+          style={{
+            minHeight: '100vh',
+            backgroundColor: '#F5F1E8',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            fontFamily: 'var(--font-sans)',
+            fontSize: '0.9rem',
+            fontWeight: 700,
+            color: '#111111',
+          }}
+        >
+          Loading Spotdrop Admin...
+        </div>
+      );
+    }
+
+    if (isAdminAuthenticated) {
+      return <AdminDashboard onLogout={() => setIsAdminAuthenticated(false)} />;
+    }
+
+    return <AdminLogin onLoginSuccess={() => setIsAdminAuthenticated(true)} />;
+  }
+
+  // Public Landing Page
   return (
     <div className="min-h-screen flex flex-col selection:bg-[#D8FF45] selection:text-[#111111]">
       {/* Sticky minimal header */}

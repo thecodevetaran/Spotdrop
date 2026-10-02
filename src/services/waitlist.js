@@ -1,55 +1,59 @@
-/**
- * Waitlist submission service for Spotdrop.
- * Separates UI logic from backend delivery so integrating Supabase,
- * Resend, Airtable, or a custom API endpoint takes only 2 lines of configuration.
- */
+import { getAttributionSource, getReferredByCode } from '../utils/referral';
 
-export async function submitToWaitlist(email) {
-  // Validate email format
-  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-  if (!email || !emailRegex.test(email)) {
+/**
+ * Submit an email to the Spotdrop server-side waitlist API
+ */
+export async function submitToWaitlist(email, honeypot = '') {
+  if (!email || typeof email !== 'string') {
+    throw new Error('Please enter your email address.');
+  }
+
+  const cleanEmail = email.trim().toLowerCase();
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
+  if (!emailRegex.test(cleanEmail)) {
     throw new Error('Please enter a valid email address.');
   }
 
-  const endpoint = import.meta.env.VITE_WAITLIST_API_URL;
-
-  if (endpoint) {
-    try {
-      const res = await fetch(endpoint, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          email,
-          city: 'Hyderabad',
-          timestamp: new Date().toISOString(),
-          source: window.location.href,
-        }),
-      });
-
-      if (!res.ok) {
-        throw new Error('Network response was not ok');
-      }
-
-      return await res.json();
-    } catch (err) {
-      console.warn('Backend endpoint unavailable, falling back to local storage:', err);
-    }
-  }
-
-  // Fallback: Local simulation & persistence in localStorage for local testing
-  await new Promise((resolve) => setTimeout(resolve, 600));
+  const source = getAttributionSource();
+  const referredBy = getReferredByCode();
 
   try {
-    const existing = JSON.parse(localStorage.getItem('spotdrop_waitlist') || '[]');
-    if (!existing.includes(email)) {
-      existing.push({ email, joinedAt: new Date().toISOString() });
-      localStorage.setItem('spotdrop_waitlist', JSON.stringify(existing));
-    }
-  } catch (e) {
-    // ignore local storage restrictions
-  }
+    const res = await fetch('/api/waitlist', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        email: cleanEmail,
+        source,
+        referredBy,
+        honeypot,
+      }),
+    });
 
-  return { success: true, email };
+    const data = await res.json().catch(() => ({}));
+
+    if (res.status === 429) {
+      throw new Error(data.message || 'Too many attempts. Please wait a moment.');
+    }
+
+    if (!res.ok && res.status !== 200 && res.status !== 201) {
+      throw new Error(data.message || 'something went wrong. Try again in a second.');
+    }
+
+    // Handles both 'success' and 'duplicate' responses cleanly
+    return {
+      status: data.status || 'success', // 'success' | 'duplicate'
+      message: data.message || "YOU'RE IN ✓",
+      subtext: data.subtext || "Don't make plans.",
+      referralCode: data.referralCode || null,
+      email: cleanEmail,
+    };
+  } catch (err) {
+    // Return friendly error if network fails or threw
+    if (err.message && !err.message.includes('fetch') && !err.message.includes('NetworkError')) {
+      throw err;
+    }
+    throw new Error('something went wrong. Try again in a second.');
+  }
 }

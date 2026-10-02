@@ -153,7 +153,28 @@ export default function Footer() {
           }}
         >
           <span>&copy; 2026 Spotdrop. All rights reserved.</span>
-          <span>Designed with care in Hyderabad.</span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '1.25rem' }}>
+            <span>Designed with care in Hyderabad.</span>
+            <a
+              href="/admin"
+              onClick={(e) => {
+                e.preventDefault();
+                window.history.pushState({}, '', '/admin');
+                window.dispatchEvent(new PopStateEvent('popstate'));
+              }}
+              style={{
+                color: 'var(--text-muted)',
+                textDecoration: 'none',
+                fontSize: '0.75rem',
+                opacity: 0.7,
+                transition: 'opacity 0.2s ease',
+              }}
+              onMouseEnter={(e) => (e.target.style.opacity = '1')}
+              onMouseLeave={(e) => (e.target.style.opacity = '0.7')}
+            >
+              Admin
+            </a>
+          </div>
         </div>
       </div>
 
