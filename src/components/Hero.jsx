@@ -3,7 +3,7 @@ import React from 'react';
 export default function Hero({ onOpenWaitlist }) {
   const scrollToWaitlist = (e) => {
     e?.preventDefault();
-    const el = document.getElementById('waitlist-section');
+    const el = document.getElementById('gatekeeper') || document.getElementById('waitlist-section');
     if (el) el.scrollIntoView({ behavior: 'smooth' });
   };
 

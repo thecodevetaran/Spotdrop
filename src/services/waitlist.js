@@ -1,6 +1,20 @@
 import { getAttributionSource, getReferredByCode } from '../utils/referral';
 
 /**
+ * Fetch live count of spots claimed from the backend
+ */
+export async function getLiveWaitlistCount() {
+  try {
+    const res = await fetch('/api/waitlist/count');
+    if (!res.ok) return null;
+    const data = await res.json();
+    return typeof data.count === 'number' ? data.count : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
  * Submit an email to the Spotdrop server-side waitlist API
  */
 export async function submitToWaitlist(email, honeypot = '') {
@@ -38,7 +52,9 @@ export async function submitToWaitlist(email, honeypot = '') {
     }
 
     if (!res.ok && res.status !== 200 && res.status !== 201) {
-      throw new Error(data.message || 'something went wrong. Try again in a second.');
+      const err = new Error(data.message || 'something went wrong.');
+      err.subtext = data.subtext || 'Try again in a second.';
+      throw err;
     }
 
     // Handles both 'success' and 'duplicate' responses cleanly
@@ -50,10 +66,11 @@ export async function submitToWaitlist(email, honeypot = '') {
       email: cleanEmail,
     };
   } catch (err) {
-    // Return friendly error if network fails or threw
-    if (err.message && !err.message.includes('fetch') && !err.message.includes('NetworkError')) {
+    if (err.message && !err.message.includes('fetch') && !err.message.includes('NetworkError') && !err.message.includes('Unexpected token')) {
       throw err;
     }
-    throw new Error('something went wrong. Try again in a second.');
+    const cleanErr = new Error('something went wrong.');
+    cleanErr.subtext = 'Try again in a second.';
+    throw cleanErr;
   }
 }

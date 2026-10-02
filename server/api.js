@@ -23,7 +23,7 @@ const api = Router();
 // Rate limiters
 const waitlistLimiter = createRateLimiter({
   windowMs: 10 * 60 * 1000, // 10 minutes
-  max: 12,
+  max: 15,
   message: 'Too many signup attempts. Please wait a minute before trying again.',
 });
 
@@ -48,10 +48,24 @@ function isValidEmail(email) {
    =================================================================== */
 
 /**
+ * GET /api/waitlist/count
+ * Live count of waitlist spots claimed for status bar & ticker
+ */
+api.get('/waitlist/count', async (req, res) => {
+  try {
+    const stats = await getStats();
+    return res.json({ count: typeof stats.total === 'number' ? stats.total : null });
+  } catch (err) {
+    console.error('Fetch count error:', err);
+    return res.json({ count: null });
+  }
+});
+
+/**
  * POST /api/waitlist
  * Submit email to the Spotdrop waitlist
  */
-api.post('/waitlist', waitlistLimiter, (req, res) => {
+api.post('/waitlist', waitlistLimiter, async (req, res) => {
   try {
     const { email, source, referredBy, honeypot } = req.body || {};
 
@@ -82,7 +96,7 @@ api.post('/waitlist', waitlistLimiter, (req, res) => {
     }
 
     // Check for existing signup
-    const existing = findByEmail(trimmedEmail);
+    const existing = await findByEmail(trimmedEmail);
     if (existing) {
       return res.status(200).json({
         status: 'duplicate',
@@ -92,18 +106,17 @@ api.post('/waitlist', waitlistLimiter, (req, res) => {
       });
     }
 
-    // Verify referral if provided
+    // Verify referral code format if provided
     let validReferredBy = null;
     if (referredBy && typeof referredBy === 'string') {
       const cleanRef = referredBy.trim().toUpperCase();
       if (cleanRef.startsWith('SPOT-')) {
-        // Can be linked to an existing code or registered code
         validReferredBy = cleanRef;
       }
     }
 
     // Create new waitlist signup
-    const newSignup = createSignup({
+    const newSignup = await createSignup({
       email: trimmedEmail,
       source: source || 'direct',
       referredBy: validReferredBy,
@@ -119,7 +132,8 @@ api.post('/waitlist', waitlistLimiter, (req, res) => {
     console.error('Waitlist submission error:', err);
     return res.status(500).json({
       error: 'Server error',
-      message: 'something went wrong. Try again in a second.',
+      message: 'something went wrong.',
+      subtext: 'Try again in a second.',
     });
   }
 });
@@ -148,7 +162,7 @@ api.post('/admin/login', loginLimiter, (req, res) => {
     return res.json({
       success: true,
       message: 'Authenticated successfully',
-      token, // Also returned in body for clients preferring headers
+      token,
     });
   } catch (err) {
     console.error('Admin login error:', err);
@@ -182,9 +196,9 @@ api.get('/admin/me', requireAdminAuth, (req, res) => {
 /**
  * GET /api/admin/stats
  */
-api.get('/admin/stats', requireAdminAuth, (req, res) => {
+api.get('/admin/stats', requireAdminAuth, async (req, res) => {
   try {
-    const stats = getStats();
+    const stats = await getStats();
     return res.json(stats);
   } catch (err) {
     console.error('Fetch stats error:', err);
@@ -195,10 +209,10 @@ api.get('/admin/stats', requireAdminAuth, (req, res) => {
 /**
  * GET /api/admin/signups
  */
-api.get('/admin/signups', requireAdminAuth, (req, res) => {
+api.get('/admin/signups', requireAdminAuth, async (req, res) => {
   try {
     const { search, source, status, sort, page, limit } = req.query;
-    const result = getSignups({ search, source, status, sort, page, limit });
+    const result = await getSignups({ search, source, status, sort, page, limit });
     return res.json(result);
   } catch (err) {
     console.error('Fetch signups error:', err);
@@ -209,17 +223,17 @@ api.get('/admin/signups', requireAdminAuth, (req, res) => {
 /**
  * PATCH /api/admin/signups/:id
  */
-api.patch('/admin/signups/:id', requireAdminAuth, (req, res) => {
+api.patch('/admin/signups/:id', requireAdminAuth, async (req, res) => {
   try {
     const id = parseInt(req.params.id, 10);
     const { status, notes } = req.body || {};
 
     let updated = null;
     if (status) {
-      updated = updateStatus(id, status);
+      updated = await updateStatus(id, status);
     }
     if (typeof notes === 'string') {
-      updated = updateNotes(id, notes);
+      updated = await updateNotes(id, notes);
     }
 
     if (!updated) {
@@ -237,11 +251,10 @@ api.patch('/admin/signups/:id', requireAdminAuth, (req, res) => {
  * GET /api/admin/export
  * Download CSV export of all signups
  */
-api.get('/admin/export', requireAdminAuth, (req, res) => {
+api.get('/admin/export', requireAdminAuth, async (req, res) => {
   try {
-    const signups = getAllForExport();
+    const signups = await getAllForExport();
 
-    // RFC 4180 CSV generation
     const headers = ['Email', 'Joined (UTC)', 'Source', 'Referral Code', 'Referred By', 'Status', 'Notes'];
 
     const escapeCsv = (val) => {

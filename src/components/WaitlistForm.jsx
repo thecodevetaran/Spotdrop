@@ -405,28 +405,64 @@ export default function WaitlistForm({
             </button>
           </div>
 
-          {/* Error Message */}
+          {/* Error Message with Retry */}
           {status === 'error' && (
-            <div style={{ marginTop: '0.6rem', paddingLeft: '0.5rem' }}>
-              <p
+            <div
+              style={{
+                marginTop: '0.85rem',
+                padding: '0.75rem 1rem',
+                backgroundColor: '#FFF0ED',
+                border: '1.5px solid var(--accent-orange)',
+                borderRadius: '12px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                gap: '0.75rem',
+                flexWrap: 'wrap',
+              }}
+            >
+              <div>
+                <p
+                  style={{
+                    color: 'var(--accent-orange)',
+                    fontSize: '0.85rem',
+                    fontWeight: 800,
+                    margin: 0,
+                    textTransform: 'uppercase',
+                    letterSpacing: '0.04em',
+                  }}
+                >
+                  {errorMessage || 'SOMETHING WENT WRONG.'}
+                </p>
+                <p
+                  style={{
+                    color: 'var(--text-secondary)',
+                    fontSize: '0.78rem',
+                    fontWeight: 600,
+                    margin: '2px 0 0',
+                  }}
+                >
+                  TRY AGAIN IN A SECOND.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={handleSubmit}
                 style={{
-                  color: 'var(--accent-orange)',
-                  fontSize: '0.88rem',
-                  fontWeight: 700,
-                  margin: 0,
+                  backgroundColor: '#111111',
+                  color: '#FFFFFF',
+                  border: 'none',
+                  borderRadius: '6px',
+                  padding: '0.4rem 0.85rem',
+                  fontSize: '0.72rem',
+                  fontWeight: 800,
+                  cursor: 'pointer',
+                  letterSpacing: '0.06em',
+                  textTransform: 'uppercase',
                 }}
               >
-                {errorMessage}
-              </p>
-              <p
-                style={{
-                  color: 'var(--text-secondary)',
-                  fontSize: '0.78rem',
-                  margin: '2px 0 0',
-                }}
-              >
-                Try again in a second.
-              </p>
+                RETRY
+              </button>
             </div>
           )}
 

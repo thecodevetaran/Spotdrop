@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
+import StatusBar from './components/StatusBar';
 import Navbar from './components/Navbar';
 import Hero from './components/Hero';
+import TasteGatekeeper from './components/TasteGatekeeper';
 import CityIntro from './sections/CityIntro';
 import DropsSection from './components/DropsSection';
 import PersonalitySection from './sections/PersonalitySection';
@@ -82,6 +84,9 @@ export default function App() {
   // Public Landing Page
   return (
     <div className="min-h-screen flex flex-col selection:bg-[#D8FF45] selection:text-[#111111]">
+      {/* 0. Live Drop Status Bar */}
+      <StatusBar />
+
       {/* Sticky minimal header */}
       <Navbar />
 
@@ -90,7 +95,10 @@ export default function App() {
         {/* 1. Hero Section */}
         <Hero />
 
-        {/* 2. City Intro Section */}
+        {/* 2. Interactive Taste Gatekeeper directly under the Hero */}
+        <TasteGatekeeper id="gatekeeper" />
+
+        {/* 3. City Intro Section */}
         <CityIntro />
 
         {/* 3. The Drops Section */}

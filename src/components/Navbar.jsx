@@ -15,7 +15,7 @@ export default function Navbar({ onOpenWaitlist }) {
   const scrollToWaitlist = (e) => {
     e?.preventDefault();
     setMobileMenuOpen(false);
-    const el = document.getElementById('waitlist-section');
+    const el = document.getElementById('gatekeeper') || document.getElementById('waitlist-section');
     if (el) {
       el.scrollIntoView({ behavior: 'smooth' });
     }

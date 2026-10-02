@@ -1,10 +1,19 @@
 import path from 'node:path';
 import fs from 'node:fs';
+import { createClient } from '@supabase/supabase-js';
 
 const isVercel = Boolean(process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME);
 const DEFAULT_SQLITE_PATH = isVercel ? '/tmp/spotdrop.db' : './data/spotdrop.db';
 const DB_PATH = process.env.DATABASE_PATH || DEFAULT_SQLITE_PATH;
 const JSON_FALLBACK_PATH = isVercel ? '/tmp/spotdrop.json' : './data/spotdrop.json';
+
+// Supabase configuration
+const SUPABASE_URL = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL;
+const SUPABASE_KEY =
+  process.env.SUPABASE_SERVICE_ROLE_KEY ||
+  process.env.SUPABASE_KEY ||
+  process.env.SUPABASE_ANON_KEY ||
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
 const REFERRAL_CHARS = '23456789ABCDEFGHJKLMNPQRSTUVWXYZ';
 
@@ -16,7 +25,6 @@ export function generateReferralCode() {
   return result;
 }
 
-// Helper to safely ensure directory exists without crashing on read-only filesystems
 function ensureDirSafe(filePath) {
   try {
     const dir = path.dirname(path.resolve(filePath));
@@ -25,14 +33,204 @@ function ensureDirSafe(filePath) {
     }
     return true;
   } catch (err) {
-    console.warn(`[Spotdrop DB] Could not create directory for ${filePath}:`, err.message);
+    console.warn(`[Spotdrop DB] Directory creation bypassed for ${filePath}:`, err.message);
     return false;
   }
 }
 
-/**
- * 1. Native SQLite Adapter (Node 22+)
- */
+/* ===================================================================
+   ADAPTER 1: SUPABASE POSTGRESQL (PRODUCTION SERVERLESS RECOMMENDED)
+   =================================================================== */
+function initSupabaseAdapter(url, key) {
+  console.info('[Spotdrop DB] Initializing Supabase cloud adapter for persistent storage.');
+  const supabase = createClient(url, key, {
+    auth: { persistSession: false },
+  });
+
+  return {
+    type: 'supabase',
+    async findByEmail(email) {
+      if (!email) return null;
+      const { data, error } = await supabase
+        .from('waitlist')
+        .select('*')
+        .ilike('email', email.trim().toLowerCase())
+        .maybeSingle();
+
+      if (error && error.code !== 'PGRST116') {
+        console.error('[Spotdrop DB] Supabase findByEmail error:', error);
+      }
+      return data || null;
+    },
+
+    async findByReferralCode(code) {
+      if (!code) return null;
+      const { data, error } = await supabase
+        .from('waitlist')
+        .select('*')
+        .eq('referral_code', code.trim().toUpperCase())
+        .maybeSingle();
+
+      if (error && error.code !== 'PGRST116') {
+        console.error('[Spotdrop DB] Supabase findByReferralCode error:', error);
+      }
+      return data || null;
+    },
+
+    async createSignup({ email, source = 'direct', referredBy = null }) {
+      const normalizedEmail = email.trim().toLowerCase();
+      let referralCode = generateReferralCode();
+      let attempts = 0;
+
+      while (attempts < 5) {
+        const existing = await this.findByReferralCode(referralCode);
+        if (!existing) break;
+        referralCode = generateReferralCode();
+        attempts++;
+      }
+
+      const normalizedSource = (source || 'direct').trim().toLowerCase().slice(0, 50);
+      const normalizedReferredBy = referredBy ? referredBy.trim().toUpperCase().slice(0, 30) : null;
+
+      const record = {
+        email: normalizedEmail,
+        created_at: new Date().toISOString(),
+        source: normalizedSource,
+        referral_code: referralCode,
+        referred_by: normalizedReferredBy,
+        status: 'waitlisted',
+        notes: '',
+      };
+
+      const { data, error } = await supabase
+        .from('waitlist')
+        .insert([record])
+        .select()
+        .single();
+
+      if (error) {
+        if (error.code === '23505') {
+          // Unique violation - already exists
+          return await this.findByEmail(normalizedEmail);
+        }
+        console.error('[Spotdrop DB] Supabase createSignup error:', error);
+        throw error;
+      }
+
+      return data;
+    },
+
+    async getStats() {
+      const now = new Date();
+      const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).toISOString();
+      const weekStart = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000).toISOString();
+
+      try {
+        const [totalRes, todayRes, weekRes, refRes] = await Promise.all([
+          supabase.from('waitlist').select('*', { count: 'exact', head: true }),
+          supabase.from('waitlist').select('*', { count: 'exact', head: true }).gte('created_at', todayStart),
+          supabase.from('waitlist').select('*', { count: 'exact', head: true }).gte('created_at', weekStart),
+          supabase.from('waitlist').select('*', { count: 'exact', head: true }).not('referred_by', 'is', null).neq('referred_by', ''),
+        ]);
+
+        return {
+          total: totalRes.count || 0,
+          today: todayRes.count || 0,
+          thisWeek: weekRes.count || 0,
+          referrals: refRes.count || 0,
+        };
+      } catch (err) {
+        console.error('[Spotdrop DB] Supabase stats error:', err);
+        return { total: 0, today: 0, thisWeek: 0, referrals: 0 };
+      }
+    },
+
+    async getSignups({ search = '', source = '', status = '', sort = 'newest', page = 1, limit = 25 }) {
+      try {
+        let query = supabase.from('waitlist').select('*', { count: 'exact' });
+
+        if (search && search.trim()) {
+          const term = `%${search.trim()}%`;
+          query = query.or(`email.ilike.${term},referral_code.ilike.${term}`);
+        }
+
+        if (source && source.trim()) {
+          query = query.eq('source', source.trim().toLowerCase());
+        }
+
+        if (status && status.trim()) {
+          query = query.eq('status', status.trim().toLowerCase());
+        }
+
+        const ascending = sort === 'oldest';
+        query = query.order('created_at', { ascending });
+
+        const parsedLimit = Math.max(1, Math.min(100, parseInt(limit, 10) || 25));
+        const parsedPage = Math.max(1, parseInt(page, 10) || 1);
+        const offset = (parsedPage - 1) * parsedLimit;
+
+        query = query.range(offset, offset + parsedLimit - 1);
+
+        const { data, count, error } = await query;
+        if (error) throw error;
+
+        return {
+          signups: data || [],
+          total: count || 0,
+          page: parsedPage,
+          limit: parsedLimit,
+          totalPages: Math.ceil((count || 0) / parsedLimit) || 1,
+        };
+      } catch (err) {
+        console.error('[Spotdrop DB] Supabase getSignups error:', err);
+        return { signups: [], total: 0, page: 1, limit, totalPages: 1 };
+      }
+    },
+
+    async updateStatus(id, newStatus) {
+      const allowed = ['waitlisted', 'invited', 'joined', 'inactive'];
+      if (!allowed.includes(newStatus)) {
+        throw new Error(`Invalid status. Allowed values: ${allowed.join(', ')}`);
+      }
+
+      const { data, error } = await supabase
+        .from('waitlist')
+        .update({ status: newStatus })
+        .eq('id', id)
+        .select()
+        .single();
+
+      if (error) throw error;
+      return data;
+    },
+
+    async updateNotes(id, notes) {
+      const { data, error } = await supabase
+        .from('waitlist')
+        .update({ notes: (notes || '').slice(0, 500) })
+        .eq('id', id)
+        .select()
+        .single();
+
+      if (error) throw error;
+      return data;
+    },
+
+    async getAllForExport() {
+      const { data, error } = await supabase
+        .from('waitlist')
+        .select('email, created_at, source, referral_code, referred_by, status, notes')
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+      return data || [];
+    },
+  };
+}
+
+/* ===================================================================
+   ADAPTER 2: NATIVE SQLITE (LOCAL DEV & TRADITIONAL NODE SERVER)
+   =================================================================== */
 function initSqliteAdapter(targetPath, DatabaseSync) {
   ensureDirSafe(targetPath);
   const db = new DatabaseSync(path.resolve(targetPath));
@@ -56,23 +254,23 @@ function initSqliteAdapter(targetPath, DatabaseSync) {
 
   return {
     type: 'sqlite',
-    findByEmail(email) {
+    async findByEmail(email) {
       if (!email) return null;
       const stmt = db.prepare('SELECT * FROM waitlist WHERE email = ? COLLATE NOCASE LIMIT 1');
       const rows = stmt.all(email.trim().toLowerCase());
       return rows.length > 0 ? rows[0] : null;
     },
-    findByReferralCode(code) {
+    async findByReferralCode(code) {
       if (!code) return null;
       const stmt = db.prepare('SELECT * FROM waitlist WHERE referral_code = ? LIMIT 1');
       const rows = stmt.all(code.trim().toUpperCase());
       return rows.length > 0 ? rows[0] : null;
     },
-    createSignup({ email, source = 'direct', referredBy = null }) {
+    async createSignup({ email, source = 'direct', referredBy = null }) {
       const normalizedEmail = email.trim().toLowerCase();
       let referralCode = generateReferralCode();
       let attempts = 0;
-      while (this.findByReferralCode(referralCode) && attempts < 10) {
+      while ((await this.findByReferralCode(referralCode)) && attempts < 10) {
         referralCode = generateReferralCode();
         attempts++;
       }
@@ -87,9 +285,9 @@ function initSqliteAdapter(targetPath, DatabaseSync) {
       `);
 
       stmt.run(normalizedEmail, createdAt, normalizedSource, referralCode, normalizedReferredBy);
-      return this.findByEmail(normalizedEmail);
+      return await this.findByEmail(normalizedEmail);
     },
-    getStats() {
+    async getStats() {
       const now = new Date();
       const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).toISOString();
       const weekStart = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000).toISOString();
@@ -108,7 +306,7 @@ function initSqliteAdapter(targetPath, DatabaseSync) {
 
       return { total, today, thisWeek, referrals };
     },
-    getSignups({ search = '', source = '', status = '', sort = 'newest', page = 1, limit = 25 }) {
+    async getSignups({ search = '', source = '', status = '', sort = 'newest', page = 1, limit = 25 }) {
       const conditions = [];
       const params = [];
 
@@ -151,7 +349,7 @@ function initSqliteAdapter(targetPath, DatabaseSync) {
         totalPages: Math.ceil(total / parsedLimit) || 1,
       };
     },
-    updateStatus(id, newStatus) {
+    async updateStatus(id, newStatus) {
       const allowed = ['waitlisted', 'invited', 'joined', 'inactive'];
       if (!allowed.includes(newStatus)) {
         throw new Error(`Invalid status. Allowed values: ${allowed.join(', ')}`);
@@ -162,7 +360,7 @@ function initSqliteAdapter(targetPath, DatabaseSync) {
       const rows = fetchStmt.all(id);
       return rows.length > 0 ? rows[0] : null;
     },
-    updateNotes(id, notes) {
+    async updateNotes(id, notes) {
       const safeNotes = (notes || '').slice(0, 500);
       const stmt = db.prepare('UPDATE waitlist SET notes = ? WHERE id = ?');
       stmt.run(safeNotes, id);
@@ -170,16 +368,16 @@ function initSqliteAdapter(targetPath, DatabaseSync) {
       const rows = fetchStmt.all(id);
       return rows.length > 0 ? rows[0] : null;
     },
-    getAllForExport() {
+    async getAllForExport() {
       const stmt = db.prepare('SELECT email, created_at, source, referral_code, referred_by, status, notes FROM waitlist ORDER BY created_at DESC');
       return stmt.all();
     },
   };
 }
 
-/**
- * 2. File-Backed JSON Store Adapter (Universal & Resilient Fallback)
- */
+/* ===================================================================
+   ADAPTER 3: FILE-BACKED JSON STORE (UNIVERSAL ZERO-DEPENDENCY FALLBACK)
+   =================================================================== */
 function initJsonAdapter(targetPath) {
   ensureDirSafe(targetPath);
   let signups = [];
@@ -209,21 +407,21 @@ function initJsonAdapter(targetPath) {
 
   return {
     type: 'json',
-    findByEmail(email) {
+    async findByEmail(email) {
       if (!email) return null;
       const lower = email.trim().toLowerCase();
       return signups.find((s) => s.email.toLowerCase() === lower) || null;
     },
-    findByReferralCode(code) {
+    async findByReferralCode(code) {
       if (!code) return null;
       const upper = code.trim().toUpperCase();
       return signups.find((s) => s.referral_code?.toUpperCase() === upper) || null;
     },
-    createSignup({ email, source = 'direct', referredBy = null }) {
+    async createSignup({ email, source = 'direct', referredBy = null }) {
       const normalizedEmail = email.trim().toLowerCase();
       let referralCode = generateReferralCode();
       let attempts = 0;
-      while (this.findByReferralCode(referralCode) && attempts < 10) {
+      while ((await this.findByReferralCode(referralCode)) && attempts < 10) {
         referralCode = generateReferralCode();
         attempts++;
       }
@@ -243,7 +441,7 @@ function initJsonAdapter(targetPath) {
       persist();
       return newRecord;
     },
-    getStats() {
+    async getStats() {
       const now = new Date();
       const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).toISOString();
       const weekStart = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000).toISOString();
@@ -255,7 +453,7 @@ function initJsonAdapter(targetPath) {
 
       return { total, today, thisWeek, referrals };
     },
-    getSignups({ search = '', source = '', status = '', sort = 'newest', page = 1, limit = 25 }) {
+    async getSignups({ search = '', source = '', status = '', sort = 'newest', page = 1, limit = 25 }) {
       let filtered = [...signups];
 
       if (search && search.trim()) {
@@ -296,7 +494,7 @@ function initJsonAdapter(targetPath) {
         totalPages: Math.ceil(total / parsedLimit) || 1,
       };
     },
-    updateStatus(id, newStatus) {
+    async updateStatus(id, newStatus) {
       const allowed = ['waitlisted', 'invited', 'joined', 'inactive'];
       if (!allowed.includes(newStatus)) {
         throw new Error(`Invalid status. Allowed values: ${allowed.join(', ')}`);
@@ -307,14 +505,14 @@ function initJsonAdapter(targetPath) {
       persist();
       return record;
     },
-    updateNotes(id, notes) {
+    async updateNotes(id, notes) {
       const record = signups.find((s) => s.id === Number(id));
       if (!record) return null;
       record.notes = (notes || '').slice(0, 500);
       persist();
       return record;
     },
-    getAllForExport() {
+    async getAllForExport() {
       return [...signups].sort((a, b) => (a.created_at < b.created_at ? 1 : -1));
     },
   };
@@ -323,69 +521,79 @@ function initJsonAdapter(targetPath) {
 // Storage adapter initialization
 let storageAdapter = null;
 
-try {
-  let sqliteModule;
+if (SUPABASE_URL && SUPABASE_KEY) {
   try {
-    const mod = await import('node:sqlite');
-    if (mod && mod.DatabaseSync) {
-      sqliteModule = mod;
-    }
-  } catch {
-    // node:sqlite not supported in current environment
+    storageAdapter = initSupabaseAdapter(SUPABASE_URL, SUPABASE_KEY);
+  } catch (err) {
+    console.error('[Spotdrop DB] Failed to init Supabase adapter:', err);
   }
+}
 
-  if (sqliteModule && sqliteModule.DatabaseSync) {
+if (!storageAdapter) {
+  try {
+    let sqliteModule;
     try {
-      storageAdapter = initSqliteAdapter(DB_PATH, sqliteModule.DatabaseSync);
-    } catch (err) {
-      console.warn(`[Spotdrop DB] Failed to init SQLite at ${DB_PATH} (${err.message}). Retrying in /tmp/spotdrop.db`);
-      try {
-        storageAdapter = initSqliteAdapter('/tmp/spotdrop.db', sqliteModule.DatabaseSync);
-      } catch (err2) {
-        console.warn(`[Spotdrop DB] SQLite in /tmp failed (${err2.message}). Falling back to JSON adapter.`);
-        storageAdapter = initJsonAdapter(JSON_FALLBACK_PATH);
+      const mod = await import('node:sqlite');
+      if (mod && mod.DatabaseSync) {
+        sqliteModule = mod;
       }
+    } catch {
+      // node:sqlite not supported
     }
-  } else {
+
+    if (sqliteModule && sqliteModule.DatabaseSync) {
+      try {
+        storageAdapter = initSqliteAdapter(DB_PATH, sqliteModule.DatabaseSync);
+      } catch (err) {
+        console.warn(`[Spotdrop DB] Failed to init SQLite at ${DB_PATH} (${err.message}). Retrying in /tmp/spotdrop.db`);
+        try {
+          storageAdapter = initSqliteAdapter('/tmp/spotdrop.db', sqliteModule.DatabaseSync);
+        } catch (err2) {
+          console.warn(`[Spotdrop DB] SQLite in /tmp failed (${err2.message}). Falling back to JSON adapter.`);
+          storageAdapter = initJsonAdapter(JSON_FALLBACK_PATH);
+        }
+      }
+    } else {
+      storageAdapter = initJsonAdapter(JSON_FALLBACK_PATH);
+    }
+  } catch (err) {
+    console.error('[Spotdrop DB] Fallback initialization error:', err);
     storageAdapter = initJsonAdapter(JSON_FALLBACK_PATH);
   }
-} catch (err) {
-  console.error('[Spotdrop DB] Fallback initialization error:', err);
-  storageAdapter = initJsonAdapter(JSON_FALLBACK_PATH);
 }
 
 /* ===================================================================
-   EXPORTED INTERFACE (UNIFIED)
+   EXPORTED INTERFACE (UNIFIED & FULLY ASYNC COMPATIBLE)
    =================================================================== */
 
-export function findByEmail(email) {
-  return storageAdapter.findByEmail(email);
+export async function findByEmail(email) {
+  return await storageAdapter.findByEmail(email);
 }
 
-export function findByReferralCode(code) {
-  return storageAdapter.findByReferralCode(code);
+export async function findByReferralCode(code) {
+  return await storageAdapter.findByReferralCode(code);
 }
 
-export function createSignup(data) {
-  return storageAdapter.createSignup(data);
+export async function createSignup(data) {
+  return await storageAdapter.createSignup(data);
 }
 
-export function getStats() {
-  return storageAdapter.getStats();
+export async function getStats() {
+  return await storageAdapter.getStats();
 }
 
-export function getSignups(params) {
-  return storageAdapter.getSignups(params);
+export async function getSignups(params) {
+  return await storageAdapter.getSignups(params);
 }
 
-export function updateStatus(id, newStatus) {
-  return storageAdapter.updateStatus(id, newStatus);
+export async function updateStatus(id, newStatus) {
+  return await storageAdapter.updateStatus(id, newStatus);
 }
 
-export function updateNotes(id, notes) {
-  return storageAdapter.updateNotes(id, notes);
+export async function updateNotes(id, notes) {
+  return await storageAdapter.updateNotes(id, notes);
 }
 
-export function getAllForExport() {
-  return storageAdapter.getAllForExport();
+export async function getAllForExport() {
+  return await storageAdapter.getAllForExport();
 }
