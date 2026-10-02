@@ -1,0 +1,267 @@
+/* ===================================================================
+   SPOTDROP GLOBAL STYLES
+   Editorial, tactile, digital scrapbook of Hyderabad
+   =================================================================== */
+
+@import './typography.css';
+@import './animations.css';
+
+:root {
+  --bg-primary: #F5F1E8;
+  --bg-secondary: #EBE5D8;
+  --bg-card: #FFFFFF;
+  --text-primary: #111111;
+  --text-secondary: #77736C;
+  --text-muted: #9E988D;
+  --accent-lime: #D8FF45;
+  --accent-orange: #E25732;
+  --accent-ink: #111111;
+  --border-subtle: #E3DCCF;
+  --border-dark: #111111;
+  --tape-color: rgba(235, 230, 218, 0.85);
+  
+  --shadow-sm: 0 2px 4px rgba(17, 17, 17, 0.04);
+  --shadow-md: 0 8px 24px -6px rgba(17, 17, 17, 0.08);
+  --shadow-lg: 0 16px 36px -10px rgba(17, 17, 17, 0.14);
+  --shadow-polaroid: 0 12px 30px -8px rgba(17, 17, 17, 0.15), 0 2px 6px rgba(17, 17, 17, 0.05);
+}
+
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html {
+  scroll-behavior: smooth;
+  background-color: var(--bg-primary);
+  color: var(--text-primary);
+  font-size: 16px;
+  overflow-x: hidden;
+}
+
+body {
+  background-color: var(--bg-primary);
+  color: var(--text-primary);
+  min-height: 100vh;
+  position: relative;
+  overflow-x: hidden;
+}
+
+/* Subtle paper texture overlay */
+body::before {
+  content: "";
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  pointer-events: none;
+  z-index: 9999;
+  opacity: 0.025;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)'/%3E%3C/svg%3E");
+}
+
+/* Selection highlight in Spotdrop lime */
+::selection {
+  background: var(--accent-lime);
+  color: #111111;
+}
+
+/* Layout containers */
+.site-wrapper {
+  max-width: 1380px;
+  margin: 0 auto;
+  padding: 0 1.5rem;
+}
+
+@media (min-width: 768px) {
+  .site-wrapper {
+    padding: 0 2.5rem;
+  }
+}
+
+@media (min-width: 1200px) {
+  .site-wrapper {
+    padding: 0 3.5rem;
+  }
+}
+
+/* Clean links and buttons */
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+button {
+  font-family: inherit;
+  cursor: pointer;
+  border: none;
+  background: none;
+}
+
+/* Spotdrop Signature Lime Badge */
+.drop-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  background-color: var(--accent-lime);
+  color: #111111;
+  font-family: var(--font-sans);
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  padding: 0.28rem 0.65rem;
+  border-radius: 9999px;
+  border: 1px solid rgba(17, 17, 17, 0.15);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+  transition: transform 0.2s ease, background-color 0.2s ease;
+}
+
+.drop-badge:hover {
+  transform: rotate(-2deg) scale(1.04);
+}
+
+/* Washi Tape Accent */
+.washi-tape {
+  position: absolute;
+  height: 24px;
+  width: 90px;
+  background: rgba(220, 214, 200, 0.85);
+  backdrop-filter: blur(2px);
+  border-left: 2px dashed rgba(17, 17, 17, 0.1);
+  border-right: 2px dashed rgba(17, 17, 17, 0.1);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
+  z-index: 10;
+  pointer-events: none;
+}
+
+/* Fun physical sticker labels */
+.sticker {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: #111111;
+  color: #F5F1E8;
+  font-family: var(--font-sans);
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  padding: 0.3rem 0.65rem;
+  border-radius: 4px;
+  box-shadow: 0 4px 12px rgba(17, 17, 17, 0.15);
+  transform: rotate(var(--rot, -3deg));
+  transition: transform 0.2s ease;
+}
+
+.sticker:hover {
+  transform: rotate(0deg) scale(1.05);
+}
+
+.sticker.sticker-lime {
+  background: var(--accent-lime);
+  color: #111111;
+  border: 1px solid rgba(17, 17, 17, 0.2);
+}
+
+.sticker.sticker-orange {
+  background: var(--accent-orange);
+  color: #FFFFFF;
+}
+
+.sticker.sticker-white {
+  background: #FFFFFF;
+  color: #111111;
+  border: 1px solid var(--border-subtle);
+}
+
+/* Polaroid style photo frames */
+.scrapbook-polaroid {
+  background: #FFFFFF;
+  padding: 0.75rem 0.75rem 1.75rem 0.75rem;
+  border: 1px solid rgba(17, 17, 17, 0.08);
+  box-shadow: var(--shadow-polaroid);
+  position: relative;
+  transition: transform 0.4s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.4s ease;
+}
+
+.scrapbook-polaroid:hover {
+  box-shadow: var(--shadow-lg);
+  z-index: 20;
+}
+
+/* Primary Lime Action Button */
+.btn-primary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.6rem;
+  background-color: var(--accent-lime);
+  color: #111111;
+  font-family: var(--font-sans);
+  font-weight: 700;
+  font-size: 0.92rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  padding: 0.95rem 1.65rem;
+  border-radius: 9999px;
+  border: 1.5px solid #111111;
+  box-shadow: 2px 3px 0px #111111;
+  transition: all 0.15s cubic-bezier(0.16, 1, 0.3, 1);
+  cursor: pointer;
+  text-decoration: none;
+}
+
+.btn-primary:hover {
+  transform: translate(-2px, -2px);
+  box-shadow: 4px 5px 0px #111111;
+  background-color: #E2FF5E;
+}
+
+.btn-primary:active {
+  transform: translate(1px, 1px);
+  box-shadow: 1px 1px 0px #111111;
+}
+
+/* Secondary Button */
+.btn-secondary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  background-color: transparent;
+  color: var(--text-primary);
+  font-family: var(--font-sans);
+  font-weight: 600;
+  font-size: 0.88rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  padding: 0.85rem 1.4rem;
+  border-radius: 9999px;
+  border: 1px solid var(--border-dark);
+  transition: all 0.2s ease;
+  cursor: pointer;
+}
+
+.btn-secondary:hover {
+  background-color: rgba(17, 17, 17, 0.05);
+  border-color: #111111;
+  transform: translateY(-1px);
+}
+
+/* Custom minimal scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+}
+::-webkit-scrollbar-track {
+  background: var(--bg-primary);
+}
+::-webkit-scrollbar-thumb {
+  background: #D1C8B8;
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #B3A895;
+}

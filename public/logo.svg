@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120" fill="none">
+  <!-- Spotdrop signature icon mark: teardrop pin with orbital fluid sweep -->
+  <path d="M 60 18 C 45 18 33 30 33 45 C 33 63 60 96 60 96 C 60 96 87 63 87 45 C 87 30 75 18 60 18 Z" fill="#E25732"/>
+  <circle cx="60" cy="45" r="10" fill="#F5F1E8"/>
+  <!-- Dynamic swoop wrapper / drop ripple -->
+  <path d="M 28 65 C 24 74 25 84 32 91 C 41 100 58 102 68 95 C 61 98 48 97 40 90 C 33 83 32 75 36 67 C 38 64 33 60 28 65 Z" fill="#E25732" opacity="0.95"/>
+  <path d="M 84 30 C 92 40 94 54 89 67 C 84 80 73 90 60 96 C 71 89 80 78 84 66 C 88 54 86 42 79 33 C 76 29 80 25 84 30 Z" fill="#E25732" opacity="0.95"/>
+</svg>
