@@ -92,7 +92,7 @@ export default function Footer() {
             <span className="drop-badge">DISPATCHES</span>
 
             <a
-              href="https://instagram.com"
+              href="https://instagram.com/spotdrop.hyd"
               target="_blank"
               rel="noopener noreferrer"
               style={{

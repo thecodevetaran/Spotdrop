@@ -112,7 +112,7 @@ export default function Navbar({ onOpenWaitlist }) {
           }}
         >
           <a
-            href="https://instagram.com"
+            href="https://instagram.com/spotdrop.hyd"
             target="_blank"
             rel="noopener noreferrer"
             style={{
@@ -204,7 +204,7 @@ export default function Navbar({ onOpenWaitlist }) {
           }}
         >
           <a
-            href="https://instagram.com"
+            href="https://instagram.com/spotdrop.hyd"
             target="_blank"
             rel="noopener noreferrer"
             style={{
