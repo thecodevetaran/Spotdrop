@@ -92,8 +92,6 @@ cp .env.example .env
 Default local variables:
 ```env
 PORT=3000
-ADMIN_PASSWORD=spotdrop_admin_2026
-SESSION_SECRET=spotdrop_dev_secret_key_hyd_2026
 DATABASE_PATH=./data/spotdrop.db
 ```
 
@@ -103,11 +101,6 @@ npm run dev
 ```
 Open **[http://localhost:5173](http://localhost:5173)**. The Vite dev server mounts the backend API directly via `spotdropApiPlugin` on port `5173`.
 
-### 4. Open the Admin Dashboard
-Visit **[http://localhost:5173/admin](http://localhost:5173/admin)**.
-* **Default Password:** `spotdrop_admin_2026` (change this in `.env` for production).
-
----
 
 ## 📦 Production Build & Deployment
 
